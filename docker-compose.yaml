@@ -1,0 +1,30 @@
+services:
+  nest-app:
+    container_name: nest-app
+    image: asdil/nest-app:latest
+    build:
+      context: .
+    ports:
+      - "3000:3000"
+    environment:
+      DB_TYPE: postgres
+      PG_HOST: db
+      PG_PORT: 5432
+      PG_USERNAME: postgres
+      PG_PASSWORD: postgres
+      PG_DATABASE: postgres
+    depends_on:
+      - db
+  db:
+    container_name: db
+    image: postgres:17.2-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data: {}
