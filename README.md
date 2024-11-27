@@ -1,99 +1,156 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
+<h1>Лабораторная работа "Docker: докеризация приложения"</h1>
+<h2>Задание</h2>
+<p>
+Цель лабораторной: собрать из исходного когда и запустить в докере рабочее приложение с базой данных (любое опенсорс - Java, python/django/flask, golang).
+
+1. Образ должен быть легковесным
+2. Использовать базовые легковесные образы - alpine
+3. Вся конфигурация приложения должна быть через переменные окружения
+4. Статика (зависимости) должна быть внешним томом `volume`
+5. Создать файл `docker-compose` для старта и сборки
+6. В `docker-compose` нужно использовать базу данных (postgresql,mysql,mongodb etc.)
+7. При старте приложения должно быть учтено выполнение автоматических миграций
+8. Контейнер должен запускаться от непривилегированного пользователя
+9. После установки всех нужных утилит, должен очищаться кеш
 </p>
+<h2>Выполнение работы</h2>
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+**1)** Было написано приложение на NestJS, PostgreSQL подключена через TypeORM. \
+В приложении описан сервис для управления пользователями и определена сущность 
+пользователя User для работы с бд с использованием TypeORM. \
+Также реализован контролер для связи маршрутов с методами сервиса.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+**2)** Для генерации миграций был написан файл конфигурации `typeorm.config.ts`, 
+чтобы сгенерировать новую миграцию нужно использовать команду `npm run migration:generate`, 
+миграции будут сгенерированы в папке `src/migrations`. 
+Для выполнения всех сгенерированных миграций нужно использовать `npm run migration:run`
 
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
-
-```bash
-$ npm install
+**3)** Dockerfile
 ```
+FROM node:18-alpine
 
-## Compile and run the project
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-```bash
-# development
-$ npm run start
+WORKDIR /usr/src/app
 
-# watch mode
-$ npm run start:dev
+COPY package*.json ./
 
-# production mode
-$ npm run start:prod
+RUN npm install && rm -rf /tmp/*
+
+COPY . .
+
+RUN npm run build
+
+USER appuser
+
+EXPOSE 3000
+
+CMD ["sh", "-c", "npm run migration:run && npm run start:prod"]
 ```
+Файл описывает процесс создания Docker-образа приложения
+- Используется базовый легковесный образ `node:18-alpine`
+- Создается группа для непривилегированного пользователя 
+и в нее добавляется пользователь
+- Устанавливает рабочая директория, 
+копируются `package.json` и `package-lock.json` в контейнер, 
+далее устанавливаются все зависимости и удаляется временный кеш
+- Все файлы проекта кроме файлов указанных в `.dockerignore` копируются в рабочую директорию
+- Выполняется команда сборки приложения и переход на непривилегированного пользователя
+- Устанавливается порт для приложения
+- При запуске контейнера выполняются миграции бд и запускается приложение
 
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+**4)** docker-compose.yaml
 ```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g mau
-$ mau deploy
+services:
+  nest-app:
+    container_name: nest-app
+    image: asdil/nest-app:latest
+    build:
+      context: .
+    ports:
+      - "3000:3000"
+    environment:
+      DB_TYPE: postgres
+      PG_HOST: db
+      PG_PORT: 5432
+      PG_USERNAME: postgres
+      PG_PASSWORD: postgres
+      PG_DATABASE: postgres
+    depends_on:
+      - db
+  db:
+    container_name: db
+    image: postgres:17.2-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data: {}
 ```
+1. В файле описана конфигурация для запуска контейнеров
+   - services - список сервисов, которые нужно запустить
+   - volumes - тома для хранения данных 
+2. Сервис nest-app
+   - задается имя контейнера
+   - используется Dockerfile для сборки образа
+   - пробрасывается порт 3000 контейнера на порт 3000 хоста 
+   - задаются переменные окружения для подключения к бд
+   - `depends_on` указывает, что сервис должен запускаться после старта сервиса db
+3. Сервис db
+   - задается имя контейнера
+   - используется легковесный образ PostgreSQL
+   - пробрасывается порт 5432 контейнера на порт 5432 хоста
+   - настраиваются учетные данные и имя бд через переменные окружения
+   - для хранения данных используется том postgres_data
+4. Тома volumes
+   - postgres_data - имя тома
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+**5)** Для сборки образов выполняем команду `docker compose build`
 
-## Resources
+![img.png](img.png)
 
-Check out a few resources that may come in handy when working with NestJS:
+**6)** Для запуска контейнеров выполняем команду `docker compose up -d`
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+![img_1.png](img_1.png)
 
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+**7)** Проверим с помощью Postman корректную работу
+-  Выполним POST запрос для добавления пользователя, в теле запроса укажем данные пользователя
+```
+{
+    "username": "aaa",
+    "email": "aaa@gmail.com"
+}
+```
+- Выполним GET запрос на localhost:3000/users/1
+```
+{
+  "id": 1,
+  "username": "aaa",
+  "email": "aaa@gmail.com"
+}
+```
+- Добавим еще нескольких пользователей и выполним запрос для получения всех пользователей
+```
+[
+    {
+        "id": 1,
+        "username": "aaa",
+        "email": "aaa@gmail.com"
+    },
+    {
+        "id": 2,
+        "username": "bbb",
+        "email": "bbb@gmail.com"
+    },
+    {
+        "id": 3,
+        "username": "ccc",
+        "email": "ccc@gmail.com"
+    }
+]
+```
