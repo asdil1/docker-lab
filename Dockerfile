@@ -1,7 +1,4 @@
-FROM node:18-alpine
-
-# Добавляем непривилегированного пользователя
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+FROM node:18-alpine AS builder
 
 # задаём рабочую директорию внутри контейнера
 WORKDIR /usr/src/app
@@ -19,11 +16,25 @@ COPY . .
 # выполняем команду сброки
 RUN npm run build
 
+CMD ["sh", "-c", "npm run migration:run"]
+
+FROM node:18-alpine
+
+# Добавляем непривилегированного пользователя
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+WORKDIR /usr/src/app
+
+# Копируем собранные файлы из builder
+COPY --from=builder /usr/src/app/dist ./dist
+COPY --from=builder /usr/src/app/node_modules ./node_modules
+COPY --from=builder /usr/src/app/package*.json ./
+
 # Переходим на непривилегированного пользователя
 USER appuser
 
 # порт который использует приложение для входящих подключений
 EXPOSE 3000
 
-# устанавливаем команду, которая будет выполнятся при запуске контейнера
-CMD ["sh", "-c", "npm run migration:run && npm run start:prod"]
+# Запуск приложения
+CMD ["sh", "-c", "npm run start:prod"]
